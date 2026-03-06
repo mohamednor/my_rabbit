@@ -4,6 +4,7 @@ import 'package:flame/components.dart';
 import 'package:flame/events.dart';
 import 'package:flutter/material.dart';
 import 'package:my_rabbit/services/ad_service.dart';
+import 'package:my_rabbit/services/audio_service.dart';
 
 // ==================== BUNNY ====================
 class Bunny extends PositionComponent {
@@ -30,43 +31,33 @@ class Bunny extends PositionComponent {
     final offset = (1 - scale) * 40;
     canvas.translate(offset, offset);
     
-    // === HAT based on level ===
     _drawHat(canvas, hatStyle);
     
-    // Ears
     canvas.drawOval(Rect.fromCenter(center: const Offset(22, 15), width: 16, height: 35), pink);
     canvas.drawOval(Rect.fromCenter(center: const Offset(58, 15), width: 16, height: 35), pink);
     final earInner = Paint()..color = const Color(0xFFFFDAB9);
     canvas.drawOval(Rect.fromCenter(center: const Offset(22, 15), width: 9, height: 22), earInner);
     canvas.drawOval(Rect.fromCenter(center: const Offset(58, 15), width: 9, height: 22), earInner);
     
-    // Body
     canvas.drawCircle(const Offset(40, 50), 32, pink);
-    
-    // Face
     canvas.drawOval(Rect.fromCenter(center: const Offset(40, 55), width: 42, height: 32), white);
     
-    // Eyes
     canvas.drawCircle(const Offset(30, 47), 6, black);
     canvas.drawCircle(const Offset(50, 47), 6, black);
     canvas.drawCircle(const Offset(28, 45), 2.5, white);
     canvas.drawCircle(const Offset(48, 45), 2.5, white);
     
-    // Nose
     canvas.drawOval(Rect.fromCenter(center: const Offset(40, 57), width: 9, height: 6), Paint()..color = Colors.pink.shade400);
     
-    // Mouth
     final mouthPaint = Paint()..color = Colors.pink.shade300..style = PaintingStyle.stroke..strokeWidth = 1.5;
     canvas.drawArc(Rect.fromCenter(center: const Offset(40, 62), width: 12, height: 8), 0.2, 2.7, false, mouthPaint);
     
-    // Cheeks
     final cheek = Paint()..color = Colors.pink.shade200.withOpacity(0.6);
     canvas.drawCircle(const Offset(16, 55), 7, cheek);
     canvas.drawCircle(const Offset(64, 55), 7, cheek);
     
     canvas.restore();
     
-    // Level badge
     if (level > 1) {
       final badge = Paint()..color = Colors.amber;
       canvas.drawCircle(Offset(size.x - 10, 10), 14, badge);
@@ -80,28 +71,27 @@ class Bunny extends PositionComponent {
   
   void _drawHat(Canvas canvas, int style) {
     switch (style % 6) {
-      case 0: // No hat (level 1-5)
-        break;
-      case 1: // Crown (level 6-10)
+      case 0: break;
+      case 1:
         final gold = Paint()..color = Colors.amber;
         canvas.drawRect(const Rect.fromLTWH(20, -5, 40, 15), gold);
         canvas.drawCircle(const Offset(25, -5), 6, gold);
         canvas.drawCircle(const Offset(40, -10), 6, gold);
         canvas.drawCircle(const Offset(55, -5), 6, gold);
         break;
-      case 2: // Party hat (level 11-15)
+      case 2:
         final partyPaint = Paint()..color = Colors.purple;
         final path = Path()..moveTo(40, -20)..lineTo(20, 10)..lineTo(60, 10)..close();
         canvas.drawPath(path, partyPaint);
         canvas.drawCircle(const Offset(40, -20), 5, Paint()..color = Colors.yellow);
         break;
-      case 3: // Top hat (level 16-20)
+      case 3:
         final hatPaint = Paint()..color = Colors.black87;
         canvas.drawRect(const Rect.fromLTWH(22, -25, 36, 30), hatPaint);
         canvas.drawRect(const Rect.fromLTWH(15, 0, 50, 8), hatPaint);
         canvas.drawRect(const Rect.fromLTWH(25, -5, 30, 5), Paint()..color = Colors.red);
         break;
-      case 4: // Flower (level 21-25)
+      case 4:
         final flowerPaint = Paint()..color = Colors.pink.shade300;
         for (int i = 0; i < 5; i++) {
           final angle = i * 3.14159 * 2 / 5;
@@ -109,7 +99,7 @@ class Bunny extends PositionComponent {
         }
         canvas.drawCircle(const Offset(40, -5), 6, Paint()..color = Colors.yellow);
         break;
-      case 5: // Star crown (level 26+)
+      case 5:
         final starPaint = Paint()..color = Colors.amber;
         for (int i = 0; i < 3; i++) {
           _drawStar(canvas, Offset(25 + i * 15.0, -8), 8, starPaint);
@@ -125,7 +115,6 @@ class Bunny extends PositionComponent {
       final point = Offset(center.dx + cos(angle) * size, center.dy + sin(angle) * size);
       if (i == 0) path.moveTo(point.dx, point.dy);
       else path.lineTo(point.dx, point.dy);
-      
       final innerAngle = angle + 3.14159 / 5;
       final innerPoint = Offset(center.dx + cos(innerAngle) * size * 0.4, center.dy + sin(innerAngle) * size * 0.4);
       path.lineTo(innerPoint.dx, innerPoint.dy);
@@ -182,11 +171,8 @@ class FallingItem extends PositionComponent {
     wobble += 0.1;
     canvas.save();
     canvas.translate(sin(wobble) * 3, 0);
-    
-    // Glow
     final glow = Paint()..color = (isCarrot ? Colors.orange : Colors.pink).withOpacity(0.3);
     canvas.drawCircle(Offset(size.x / 2, size.y / 2), 28, glow);
-    
     tp.paint(canvas, Offset((size.x - tp.width) / 2, (size.y - tp.height) / 2));
     canvas.restore();
   }
@@ -257,6 +243,7 @@ class MyRabbitGame extends FlameGame with PanDetector, TapDetector {
   final Function onLevelComplete;
   final Function onLevelFailed;
   final Function(int, int) onScoreUpdate;
+  final AudioService audioService;
   int bunnyLevel;
   
   late Bunny bunny;
@@ -279,7 +266,6 @@ class MyRabbitGame extends FlameGame with PanDetector, TapDetector {
   AdRewardType? activeBoost;
   double boostTimeRemaining = 0;
   
-  // Items for different levels
   final candyEmojis = ['🍬', '🍭', '🍫', '🍩', '🧁', '🍪', '🍰', '🎂', '🍦', '🍨'];
   final carrotEmojis = ['🥕', '🥕', '🥕', '🥬', '🥦', '🍎'];
   final obstacleEmojis = ['🦔', '🌵', '💨', '🔥', '⚡', '🕳️', '👻', '🦇'];
@@ -289,6 +275,7 @@ class MyRabbitGame extends FlameGame with PanDetector, TapDetector {
     required this.onLevelComplete,
     required this.onLevelFailed,
     required this.onScoreUpdate,
+    required this.audioService,
     this.bunnyLevel = 1,
   }) {
     candyGoal = 12 + level * 2;
@@ -302,7 +289,6 @@ class MyRabbitGame extends FlameGame with PanDetector, TapDetector {
   
   @override
   Future<void> onLoad() async {
-    // Bunny at center, higher up
     final hatStyle = (level - 1) ~/ 5;
     bunny = Bunny(Vector2(size.x / 2, size.y * 0.65), bunnyLevel, hatStyle);
     bunny.baseY = size.y * 0.65;
@@ -311,7 +297,6 @@ class MyRabbitGame extends FlameGame with PanDetector, TapDetector {
   
   @override
   void render(Canvas canvas) {
-    // Gradient background
     final rect = Rect.fromLTWH(0, 0, size.x, size.y);
     final gradient = LinearGradient(
       begin: Alignment.topCenter,
@@ -319,17 +304,12 @@ class MyRabbitGame extends FlameGame with PanDetector, TapDetector {
       colors: [theme.color1, theme.color2],
     );
     canvas.drawRect(rect, Paint()..shader = gradient.createShader(rect));
-    
-    // Decorative elements
     _drawBackgroundDecorations(canvas);
-    
     super.render(canvas);
   }
   
   void _drawBackgroundDecorations(Canvas canvas) {
     final decorPaint = Paint()..color = Colors.white.withOpacity(0.15);
-    
-    // Floating circles
     for (int i = 0; i < 8; i++) {
       final x = (i * 60.0 + 30) % size.x;
       final y = (i * 80.0 + 50) % size.y;
@@ -344,20 +324,20 @@ class MyRabbitGame extends FlameGame with PanDetector, TapDetector {
     
     final cappedDt = dt.clamp(0.0, 0.05);
     
-    // Timer
     timeRemaining -= cappedDt;
     if (timeRemaining <= 0) {
       timeRemaining = 0;
       isPlaying = false;
       if (candiesCollected >= candyGoal) {
+        audioService.playWin();
         onLevelComplete();
       } else {
+        audioService.playLose();
         onLevelFailed();
       }
       return;
     }
     
-    // Spawn items
     spawnTimer += cappedDt;
     final spawnRate = 0.45 - level * 0.008;
     if (spawnTimer >= spawnRate.clamp(0.2, 0.45) && items.length < 25) {
@@ -365,7 +345,6 @@ class MyRabbitGame extends FlameGame with PanDetector, TapDetector {
       _spawnItem();
     }
     
-    // Spawn obstacles (from level 6)
     if (level >= 6) {
       obstacleTimer += cappedDt;
       if (obstacleTimer >= 2.5 - level * 0.03 && obstacles.length < 5) {
@@ -374,11 +353,9 @@ class MyRabbitGame extends FlameGame with PanDetector, TapDetector {
       }
     }
     
-    // Update items & check collision
     _updateItems();
     _updateObstacles();
     
-    // Boost timer
     if (activeBoost != null) {
       boostTimeRemaining -= cappedDt;
       if (boostTimeRemaining <= 0) activeBoost = null;
@@ -429,6 +406,7 @@ class MyRabbitGame extends FlameGame with PanDetector, TapDetector {
       }
       
       if ((item.position - bunny.position).length < pickupRadius) {
+        audioService.playCollect();
         var pts = item.points;
         if (activeBoost == AdRewardType.doublePoints) pts *= 2;
         score += pts;
@@ -439,6 +417,7 @@ class MyRabbitGame extends FlameGame with PanDetector, TapDetector {
         
         if (candiesCollected >= candyGoal) {
           isPlaying = false;
+          audioService.playWin();
           onLevelComplete();
           return;
         }
@@ -457,12 +436,14 @@ class MyRabbitGame extends FlameGame with PanDetector, TapDetector {
       }
       
       if (!bunny.isJumping && (obs.position - bunny.position).length < 40) {
+        audioService.playHurt();
         lives--;
         remove(obs);
         obstacles.removeAt(i);
         
         if (lives <= 0) {
           isPlaying = false;
+          audioService.playLose();
           onLevelFailed();
           return;
         }
@@ -480,6 +461,7 @@ class MyRabbitGame extends FlameGame with PanDetector, TapDetector {
   @override
   void onTapDown(TapDownInfo info) {
     if (isPlaying && !isPaused) {
+      audioService.playJump();
       bunny.jump();
     }
   }
