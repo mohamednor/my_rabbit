@@ -9,7 +9,7 @@ import 'package:my_rabbit/game/systems/object_pool.dart';
 import 'package:my_rabbit/models/game_config.dart';
 import 'package:my_rabbit/services/ad_service.dart';
 
-class MyRabbitGame extends FlameGame with PanDetector, TapDetector {
+class MyRabbitGame extends FlameGame with PanDetector, TapDetector, HasCollisionDetection {
   final int level;
   final Function onLevelComplete;
   final Function onLevelFailed;
@@ -23,12 +23,12 @@ class MyRabbitGame extends FlameGame with PanDetector, TapDetector {
   double timeRemaining = 0;
   int lives = 3;
   int growthProgress = 0;
-  int bunnyLevel = 1;
+  int bunnyLevel;
   
   AdRewardType? activeBoost;
   double boostTimeRemaining = 0;
   
-  late BunnyComponent bunny;
+  BunnyComponent? bunny;
   late GameWorld currentWorld;
   
   late ObjectPool<CandyComponent> candyPool;
@@ -64,22 +64,29 @@ class MyRabbitGame extends FlameGame with PanDetector, TapDetector {
     _speedMult = GameConfig.speedMultiplier(level);
     _spawnMult = GameConfig.spawnMultiplier(level);
     
-    candyPool = ObjectPool<CandyComponent>(create: () => CandyComponent(), initialSize: GameConfig.maxCandiesOnScreen);
-    obstaclePool = ObjectPool<ObstacleComponent>(create: () => ObstacleComponent(), initialSize: GameConfig.maxObstaclesOnScreen);
+    candyPool = ObjectPool<CandyComponent>(create: () => CandyComponent(), initialSize: 20);
+    obstaclePool = ObjectPool<ObstacleComponent>(create: () => ObstacleComponent(), initialSize: 10);
     
-    bunny = BunnyComponent(position: Vector2(size.x / 2, size.y * 0.8), bunnyLevel: bunnyLevel);
-    add(bunny);
+    // Create bunny at center bottom
+    bunny = BunnyComponent(
+      position: Vector2(size.x / 2, size.y * 0.75),
+      bunnyLevel: bunnyLevel,
+    );
+    add(bunny!);
     
+    // Start the game
     isPlaying = true;
   }
   
   @override
   void update(double dt) {
-    if (!isPlaying || isPaused) return;
+    super.update(dt);
+    
+    if (!isPlaying || isPaused || bunny == null) return;
     
     final cappedDt = dt.clamp(0.0, GameConfig.maxDeltaTime);
-    super.update(cappedDt);
     
+    // Update timer
     timeRemaining -= cappedDt;
     if (timeRemaining <= 0) {
       timeRemaining = 0;
@@ -87,11 +94,19 @@ class MyRabbitGame extends FlameGame with PanDetector, TapDetector {
       return;
     }
     
+    // Spawn candies
     _spawnCandies(cappedDt);
-    _spawnObstacles(cappedDt);
+    
+    // Spawn obstacles (after level 3)
+    if (level >= 3) {
+      _spawnObstacles(cappedDt);
+    }
+    
+    // Update and check collisions
     _updateEntities();
     _checkCollisions();
     
+    // Update boost
     if (activeBoost != null) {
       boostTimeRemaining -= cappedDt;
       if (boostTimeRemaining <= 0) {
@@ -99,6 +114,7 @@ class MyRabbitGame extends FlameGame with PanDetector, TapDetector {
       }
     }
     
+    // Check win condition
     if (candiesCollected >= candyGoal) {
       _endLevel();
     }
@@ -113,7 +129,7 @@ class MyRabbitGame extends FlameGame with PanDetector, TapDetector {
       final candy = candyPool.obtain();
       if (candy != null) {
         candy.reset(
-          position: Vector2(_random.nextDouble() * (size.x - 60) + 30, -50),
+          position: Vector2(_random.nextDouble() * (size.x - 80) + 40, -60),
           candyType: Candies.getNext(),
           fallSpeed: GameConfig.baseCandyFallSpeed * _speedMult,
         );
@@ -136,7 +152,7 @@ class MyRabbitGame extends FlameGame with PanDetector, TapDetector {
         if (activeBoost == AdRewardType.slowerObstacles) speed *= 0.5;
         
         obstacle.reset(
-          position: Vector2(_random.nextDouble() * (size.x - 60) + 30, -50),
+          position: Vector2(_random.nextDouble() * (size.x - 80) + 40, -60),
           obstacleType: obstacleType,
           fallSpeed: speed,
           horizontalMove: obstacleType.canMove && GameConfig.hasMovingObstacles(level),
@@ -150,33 +166,37 @@ class MyRabbitGame extends FlameGame with PanDetector, TapDetector {
   
   void _updateEntities() {
     for (int i = _activeCandies.length - 1; i >= 0; i--) {
-      if (_activeCandies[i].position.y > size.y + 50) {
+      if (_activeCandies[i].position.y > size.y + 60) {
         _returnCandy(_activeCandies[i], i);
       }
     }
     for (int i = _activeObstacles.length - 1; i >= 0; i--) {
-      if (_activeObstacles[i].position.y > size.y + 50) {
+      if (_activeObstacles[i].position.y > size.y + 60) {
         _returnObstacle(_activeObstacles[i], i);
       }
     }
   }
   
   void _checkCollisions() {
-    final bunnyPos = bunny.position;
-    double pickupRadius = GameConfig.basePickupRadius + (bunnyLevel * 3);
+    if (bunny == null) return;
+    
+    final bunnyPos = bunny!.position;
+    double pickupRadius = GameConfig.basePickupRadius + (bunnyLevel * 4);
     if (activeBoost == AdRewardType.biggerRadius) {
-      pickupRadius = GameConfig.boostedPickupRadius + (bunnyLevel * 5);
+      pickupRadius = GameConfig.boostedPickupRadius + (bunnyLevel * 6);
     }
     
+    // Check candy collisions
     for (int i = _activeCandies.length - 1; i >= 0; i--) {
       if (bunnyPos.distanceTo(_activeCandies[i].position) < pickupRadius) {
         _collectCandy(_activeCandies[i], i);
       }
     }
     
-    if (!bunny.isJumping) {
+    // Check obstacle collisions
+    if (!bunny!.isJumping) {
       for (int i = _activeObstacles.length - 1; i >= 0; i--) {
-        if (bunnyPos.distanceTo(_activeObstacles[i].position) < GameConfig.obstacleHitRadius) {
+        if (bunnyPos.distanceTo(_activeObstacles[i].position) < GameConfig.obstacleHitRadius + 10) {
           _hitObstacle(_activeObstacles[i], i);
         }
       }
@@ -194,7 +214,7 @@ class MyRabbitGame extends FlameGame with PanDetector, TapDetector {
     if (growthProgress >= GameConfig.candiesPerGrowth && bunnyLevel < GameConfig.maxBunnyLevel) {
       bunnyLevel++;
       growthProgress = 0;
-      bunny.levelUp(bunnyLevel);
+      bunny?.levelUp(bunnyLevel);
     }
     
     onScoreUpdate(score, candiesCollected);
@@ -203,7 +223,7 @@ class MyRabbitGame extends FlameGame with PanDetector, TapDetector {
   
   void _hitObstacle(ObstacleComponent obstacle, int index) {
     lives--;
-    bunny.hurt();
+    bunny?.hurt();
     _returnObstacle(obstacle, index);
     
     if (lives <= 0) {
@@ -243,11 +263,15 @@ class MyRabbitGame extends FlameGame with PanDetector, TapDetector {
   
   @override
   void onPanUpdate(DragUpdateInfo info) {
-    if (isPlaying && !isPaused) bunny.moveHorizontal(info.delta.global.x);
+    if (isPlaying && !isPaused && bunny != null) {
+      bunny!.moveHorizontal(info.delta.global.x);
+    }
   }
   
   @override
   void onTapDown(TapDownInfo info) {
-    if (isPlaying && !isPaused) bunny.jump();
+    if (isPlaying && !isPaused && bunny != null) {
+      bunny!.jump();
+    }
   }
 }
