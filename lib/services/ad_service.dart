@@ -23,10 +23,10 @@ extension AdRewardTypeExt on AdRewardType {
 }
 
 class AdService {
-  static const String _bannerAdUnitId = 'ca-app-pub-4380269071153281/4882324106';
+  // Test Ad Unit IDs (for testing)
+  static const String _bannerAdUnitId = 'ca-app-pub-3940256099942544/6300978111';
   static const List<String> _rewardedAdUnitIds = [
-    'ca-app-pub-4380269071153281/5629117921',
-    'ca-app-pub-4380269071153281/3562667293',
+    'ca-app-pub-3940256099942544/5224354917',
   ];
   
   BannerAd? _bannerAd;
@@ -42,12 +42,11 @@ class AdService {
   final Random _random = Random();
   
   void initialize() {
-    loadBannerAd();
-    loadRewardedAd();
+    _loadBannerAd();
+    _loadRewardedAd();
   }
   
-  void loadBannerAd({Function? onLoaded}) {
-    _bannerAd?.dispose();
+  void _loadBannerAd() {
     _bannerAd = BannerAd(
       adUnitId: _bannerAdUnitId,
       size: AdSize.banner,
@@ -55,33 +54,27 @@ class AdService {
       listener: BannerAdListener(
         onAdLoaded: (ad) {
           _isBannerLoaded = true;
-          onLoaded?.call();
         },
         onAdFailedToLoad: (ad, error) {
           ad.dispose();
           _isBannerLoaded = false;
-          Future.delayed(const Duration(seconds: 30), loadBannerAd);
         },
       ),
     );
     _bannerAd!.load();
   }
   
-  void loadRewardedAd({Function? onLoaded}) {
-    final adUnitId = _rewardedAdUnitIds[_random.nextInt(_rewardedAdUnitIds.length)];
-    
+  void _loadRewardedAd() {
     RewardedAd.load(
-      adUnitId: adUnitId,
+      adUnitId: _rewardedAdUnitIds[0],
       request: const AdRequest(),
       rewardedAdLoadCallback: RewardedAdLoadCallback(
         onAdLoaded: (ad) {
           _rewardedAd = ad;
           _isRewardedLoaded = true;
-          onLoaded?.call();
         },
         onAdFailedToLoad: (error) {
           _isRewardedLoaded = false;
-          Future.delayed(const Duration(seconds: 30), loadRewardedAd);
         },
       ),
     );
@@ -94,7 +87,7 @@ class AdService {
   }) {
     if (_rewardedAd == null || !_isRewardedLoaded) {
       onAdNotReady?.call();
-      loadRewardedAd();
+      _loadRewardedAd();
       return;
     }
     
@@ -103,14 +96,14 @@ class AdService {
         ad.dispose();
         _rewardedAd = null;
         _isRewardedLoaded = false;
-        loadRewardedAd();
+        _loadRewardedAd();
         onAdClosed?.call();
       },
       onAdFailedToShowFullScreenContent: (ad, error) {
         ad.dispose();
         _rewardedAd = null;
         _isRewardedLoaded = false;
-        loadRewardedAd();
+        _loadRewardedAd();
       },
     );
     
