@@ -23,11 +23,14 @@ extension AdRewardTypeExt on AdRewardType {
 }
 
 class AdService {
-  // Test Ad Unit IDs (for testing)
-  static const String _bannerAdUnitId = 'ca-app-pub-3940256099942544/6300978111';
-  static const List<String> _rewardedAdUnitIds = [
-    'ca-app-pub-3940256099942544/5224354917',
-  ];
+ // Production Ad Unit IDs
+static const String _bannerAdUnitId =
+    'ca-app-pub-4380269071153281/4882324106';
+
+static const List<String> _rewardedAdUnitIds = [
+  'ca-app-pub-4380269071153281/5629117921',
+  'ca-app-pub-4380269071153281/3562667293',
+];
   
   BannerAd? _bannerAd;
   RewardedAd? _rewardedAd;
