@@ -17,13 +17,19 @@ void main() async {
   
   await MobileAds.instance.initialize();
   
+  // Initialize audio
+  final audioService = AudioService();
+  await audioService.initialize();
+  
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
   
-  runApp(const MyRabbitApp());
+  runApp(MyRabbitApp(audioService: audioService));
 }
 
 class MyRabbitApp extends StatelessWidget {
-  const MyRabbitApp({super.key});
+  final AudioService audioService;
+  
+  const MyRabbitApp({super.key, required this.audioService});
 
   @override
   Widget build(BuildContext context) {
@@ -31,7 +37,7 @@ class MyRabbitApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (_) => GameStateService()..loadState()),
         Provider(create: (_) => AdService()..initialize()),
-        Provider(create: (_) => AudioService()),
+        Provider.value(value: audioService),
       ],
       child: MaterialApp(
         title: 'My Rabbit',
