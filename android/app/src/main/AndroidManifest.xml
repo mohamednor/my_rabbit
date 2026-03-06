@@ -7,7 +7,7 @@
     <application
         android:label="My Rabbit"
         android:name="${applicationName}"
-        android:icon="@android:drawable/sym_def_app_icon"
+        android:icon="@mipmap/ic_launcher"
         android:enableOnBackInvokedCallback="true">
         
         <!-- AdMob Test App ID -->
