@@ -6,6 +6,7 @@ import 'package:my_rabbit/game/my_rabbit_game.dart';
 import 'package:my_rabbit/models/game_config.dart';
 import 'package:my_rabbit/services/ad_service.dart';
 import 'package:my_rabbit/services/game_state_service.dart';
+import 'package:my_rabbit/services/audio_service.dart';
 
 class GameScreen extends StatefulWidget {
   final int level;
@@ -29,7 +30,6 @@ class _GameScreenState extends State<GameScreen> {
   int _earnedStars = 0;
   AdRewardType? _activeBoost;
   double _boostTime = 0;
-  bool _gameReady = false;
 
   @override
   void initState() {
@@ -38,9 +38,11 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   void _initGame() {
+    final audioService = context.read<AudioService>();
     _game = MyRabbitGame(
       level: widget.level,
       bunnyLevel: widget.bunnyLevel,
+      audioService: audioService,
       onLevelComplete: _onLevelComplete,
       onLevelFailed: _onLevelFailed,
       onScoreUpdate: (score, candies) {
@@ -49,10 +51,7 @@ class _GameScreenState extends State<GameScreen> {
     );
     
     Future.delayed(const Duration(milliseconds: 500), () {
-      if (mounted) {
-        setState(() => _gameReady = true);
-        _updateHud();
-      }
+      if (mounted) _updateHud();
     });
   }
 
@@ -97,15 +96,14 @@ class _GameScreenState extends State<GameScreen> {
   @override
   Widget build(BuildContext context) {
     final adService = context.read<AdService>();
+    final audioService = context.read<AudioService>();
     final candyGoal = GameConfig.candyGoal(widget.level);
 
     return Scaffold(
       body: Stack(
         children: [
-          // Game
           if (_game != null) GameWidget(game: _game!),
           
-          // HUD
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.all(12),
@@ -114,7 +112,11 @@ class _GameScreenState extends State<GameScreen> {
                   Row(
                     children: [
                       GestureDetector(
-                        onTap: () { _game?.pause(); setState(() => _showPauseMenu = true); },
+                        onTap: () {
+                          audioService.playClick();
+                          _game?.pause();
+                          setState(() => _showPauseMenu = true);
+                        },
                         child: Container(width: 48, height: 48, decoration: BoxDecoration(color: Colors.orange, borderRadius: BorderRadius.circular(12)), child: const Center(child: Text('⏸️', style: TextStyle(fontSize: 24)))),
                       ),
                       const SizedBox(width: 12),
@@ -156,27 +158,22 @@ class _GameScreenState extends State<GameScreen> {
             ),
           ),
           
-          // Instructions
           Positioned(
             bottom: 80, left: 0, right: 0,
             child: Center(child: Container(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), decoration: BoxDecoration(color: Colors.black45, borderRadius: BorderRadius.circular(20)), child: const Text('👆 Drag to move • Tap to jump', style: TextStyle(color: Colors.white, fontSize: 14)))),
           ),
           
-          // Banner Ad
           if (adService.isBannerLoaded && adService.bannerAd != null)
             Positioned(bottom: 0, left: 0, right: 0, child: SizedBox(height: 50, child: AdWidget(ad: adService.bannerAd!))),
           
-          // Pause Menu
-          if (_showPauseMenu) _buildPauseMenu(adService),
-          
-          // Level Complete
-          if (_showLevelComplete) _buildLevelCompleteMenu(),
+          if (_showPauseMenu) _buildPauseMenu(adService, audioService),
+          if (_showLevelComplete) _buildLevelCompleteMenu(audioService),
         ],
       ),
     );
   }
 
-  Widget _buildPauseMenu(AdService adService) {
+  Widget _buildPauseMenu(AdService adService, AudioService audioService) {
     return Container(
       color: Colors.black54,
       child: Center(
@@ -188,18 +185,21 @@ class _GameScreenState extends State<GameScreen> {
             children: [
               const Text('⏸️ Paused', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Color(0xFFFF69B4))),
               const SizedBox(height: 24),
-              _buildMenuButton('▶️ Resume', Colors.green, () { _game?.resume(); setState(() => _showPauseMenu = false); }),
-              const SizedBox(height: 12),
-              if (adService.isRewardedLoaded) _buildMenuButton('🎬 Watch Ad for Boost!', Colors.amber, () {
-                adService.showRewardedAd(
-                  onRewarded: (type) { _game?.applyBoost(type); setState(() { _activeBoost = type; _boostTime = 12; _showPauseMenu = false; }); _game?.resume(); },
-                  onAdClosed: () { if (_showPauseMenu) { _game?.resume(); setState(() => _showPauseMenu = false); } },
-                );
+              _buildMenuButton('▶️ Resume', Colors.green, () {
+                audioService.playClick();
+                _game?.resume();
+                setState(() => _showPauseMenu = false);
               }),
               const SizedBox(height: 12),
-              _buildMenuButton('🔄 Restart', Colors.orange, () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => GameScreen(level: widget.level, bunnyLevel: context.read<GameStateService>().bunnySize)))),
+              _buildMenuButton('🔄 Restart', Colors.orange, () {
+                audioService.playClick();
+                Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => GameScreen(level: widget.level, bunnyLevel: context.read<GameStateService>().bunnySize)));
+              }),
               const SizedBox(height: 12),
-              _buildMenuButton('🚪 Exit', Colors.pink, () => Navigator.of(context).popUntil((route) => route.isFirst)),
+              _buildMenuButton('🚪 Exit', Colors.pink, () {
+                audioService.playClick();
+                Navigator.of(context).popUntil((route) => route.isFirst);
+              }),
             ],
           ),
         ),
@@ -207,7 +207,7 @@ class _GameScreenState extends State<GameScreen> {
     );
   }
 
-  Widget _buildLevelCompleteMenu() {
+  Widget _buildLevelCompleteMenu(AudioService audioService) {
     return Container(
       color: Colors.black54,
       child: Center(
@@ -227,11 +227,20 @@ class _GameScreenState extends State<GameScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  if (_levelWon && widget.level < GameConfig.totalLevels) _buildSmallButton('Next ➡️', Colors.green, () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => GameScreen(level: widget.level + 1, bunnyLevel: context.read<GameStateService>().bunnySize)))),
+                  if (_levelWon && widget.level < GameConfig.totalLevels) _buildSmallButton('Next ➡️', Colors.green, () {
+                    audioService.playClick();
+                    Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => GameScreen(level: widget.level + 1, bunnyLevel: context.read<GameStateService>().bunnySize)));
+                  }),
                   const SizedBox(width: 12),
-                  _buildSmallButton('🔄', Colors.orange, () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => GameScreen(level: widget.level, bunnyLevel: context.read<GameStateService>().bunnySize)))),
+                  _buildSmallButton('🔄', Colors.orange, () {
+                    audioService.playClick();
+                    Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => GameScreen(level: widget.level, bunnyLevel: context.read<GameStateService>().bunnySize)));
+                  }),
                   const SizedBox(width: 12),
-                  _buildSmallButton('🗺️', Colors.pink, () => Navigator.of(context).popUntil((route) => route.isFirst)),
+                  _buildSmallButton('🗺️', Colors.pink, () {
+                    audioService.playClick();
+                    Navigator.of(context).popUntil((route) => route.isFirst);
+                  }),
                 ],
               ),
             ],
