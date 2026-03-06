@@ -18,7 +18,7 @@ class GameScreen extends StatefulWidget {
 }
 
 class _GameScreenState extends State<GameScreen> {
-  late MyRabbitGame _game;
+  MyRabbitGame? _game;
   int _score = 0;
   int _candies = 0;
   double _timeRemaining = 0;
@@ -29,6 +29,7 @@ class _GameScreenState extends State<GameScreen> {
   int _earnedStars = 0;
   AdRewardType? _activeBoost;
   double _boostTime = 0;
+  bool _gameReady = false;
 
   @override
   void initState() {
@@ -42,20 +43,30 @@ class _GameScreenState extends State<GameScreen> {
       bunnyLevel: widget.bunnyLevel,
       onLevelComplete: _onLevelComplete,
       onLevelFailed: _onLevelFailed,
-      onScoreUpdate: (score, candies) => setState(() { _score = score; _candies = candies; }),
+      onScoreUpdate: (score, candies) {
+        if (mounted) setState(() { _score = score; _candies = candies; });
+      },
     );
-    Future.delayed(const Duration(milliseconds: 100), _updateHud);
+    
+    Future.delayed(const Duration(milliseconds: 500), () {
+      if (mounted) {
+        setState(() => _gameReady = true);
+        _updateHud();
+      }
+    });
   }
 
   void _updateHud() {
-    if (!mounted) return;
+    if (!mounted || _game == null) return;
+    
     setState(() {
-      _timeRemaining = _game.timeRemaining;
-      _lives = _game.lives;
-      _activeBoost = _game.activeBoost;
-      _boostTime = _game.boostTimeRemaining;
+      _timeRemaining = _game!.timeRemaining;
+      _lives = _game!.lives;
+      _activeBoost = _game!.activeBoost;
+      _boostTime = _game!.boostTimeRemaining;
     });
-    if (_game.isPlaying && !_showLevelComplete) {
+    
+    if (_game!.isPlaying && !_showLevelComplete) {
       Future.delayed(const Duration(milliseconds: 100), _updateHud);
     }
   }
@@ -66,17 +77,21 @@ class _GameScreenState extends State<GameScreen> {
     if (_candies >= candyGoal * 1.5) stars = 2;
     if (_candies >= candyGoal * 2) stars = 3;
     
-    setState(() { _showLevelComplete = true; _levelWon = true; _earnedStars = stars; });
+    if (mounted) {
+      setState(() { _showLevelComplete = true; _levelWon = true; _earnedStars = stars; });
+    }
     
     final gameState = context.read<GameStateService>();
     gameState.completeLevel(widget.level, stars, _score);
     gameState.addCoins(_score + (stars * 25));
     gameState.addCandies(_candies);
-    if (_game.bunnyLevel > widget.bunnyLevel) gameState.setBunnySize(_game.bunnyLevel);
+    if (_game!.bunnyLevel > widget.bunnyLevel) gameState.setBunnySize(_game!.bunnyLevel);
   }
 
   void _onLevelFailed() {
-    setState(() { _showLevelComplete = true; _levelWon = false; _earnedStars = 0; });
+    if (mounted) {
+      setState(() { _showLevelComplete = true; _levelWon = false; _earnedStars = 0; });
+    }
   }
 
   @override
@@ -87,7 +102,10 @@ class _GameScreenState extends State<GameScreen> {
     return Scaffold(
       body: Stack(
         children: [
-          GameWidget(game: _game),
+          // Game
+          if (_game != null) GameWidget(game: _game!),
+          
+          // HUD
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.all(12),
@@ -96,14 +114,14 @@ class _GameScreenState extends State<GameScreen> {
                   Row(
                     children: [
                       GestureDetector(
-                        onTap: () { _game.pause(); setState(() => _showPauseMenu = true); },
-                        child: Container(width: 44, height: 44, decoration: BoxDecoration(color: Colors.white.withOpacity(0.9), borderRadius: BorderRadius.circular(12)), child: const Center(child: Text('⏸️', style: TextStyle(fontSize: 22)))),
+                        onTap: () { _game?.pause(); setState(() => _showPauseMenu = true); },
+                        child: Container(width: 48, height: 48, decoration: BoxDecoration(color: Colors.orange, borderRadius: BorderRadius.circular(12)), child: const Center(child: Text('⏸️', style: TextStyle(fontSize: 24)))),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Container(
                           padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(color: Colors.white.withOpacity(0.9), borderRadius: BorderRadius.circular(16)),
+                          decoration: BoxDecoration(color: Colors.white.withOpacity(0.95), borderRadius: BorderRadius.circular(16)),
                           child: Column(
                             children: [
                               Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
@@ -120,9 +138,9 @@ class _GameScreenState extends State<GameScreen> {
                       ),
                       const SizedBox(width: 12),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                        decoration: BoxDecoration(color: Colors.white.withOpacity(0.9), borderRadius: BorderRadius.circular(16)),
-                        child: Row(children: List.generate(3, (i) => Text(i < _lives ? '❤️' : '🖤', style: const TextStyle(fontSize: 16)))),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(color: Colors.white.withOpacity(0.95), borderRadius: BorderRadius.circular(16)),
+                        child: Row(children: List.generate(3, (i) => Text(i < _lives ? '❤️' : '🖤', style: const TextStyle(fontSize: 18)))),
                       ),
                     ],
                   ),
@@ -130,20 +148,28 @@ class _GameScreenState extends State<GameScreen> {
                     Container(
                       margin: const EdgeInsets.only(top: 10),
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      decoration: BoxDecoration(color: Colors.amber.withOpacity(0.9), borderRadius: BorderRadius.circular(20)),
+                      decoration: BoxDecoration(color: Colors.amber, borderRadius: BorderRadius.circular(20)),
                       child: Text('${_activeBoost!.displayName} ${_boostTime.toInt()}s', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.brown)),
                     ),
                 ],
               ),
             ),
           ),
+          
+          // Instructions
           Positioned(
-            bottom: 70, left: 0, right: 0,
-            child: Center(child: Container(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), decoration: BoxDecoration(color: Colors.black38, borderRadius: BorderRadius.circular(20)), child: const Text('👆 Drag to move • Tap to jump', style: TextStyle(color: Colors.white, fontSize: 13)))),
+            bottom: 80, left: 0, right: 0,
+            child: Center(child: Container(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), decoration: BoxDecoration(color: Colors.black45, borderRadius: BorderRadius.circular(20)), child: const Text('👆 Drag to move • Tap to jump', style: TextStyle(color: Colors.white, fontSize: 14)))),
           ),
+          
+          // Banner Ad
           if (adService.isBannerLoaded && adService.bannerAd != null)
-            Positioned(bottom: 0, left: 0, right: 0, child: SizedBox(height: adService.bannerAd!.size.height.toDouble(), child: AdWidget(ad: adService.bannerAd!))),
+            Positioned(bottom: 0, left: 0, right: 0, child: SizedBox(height: 50, child: AdWidget(ad: adService.bannerAd!))),
+          
+          // Pause Menu
           if (_showPauseMenu) _buildPauseMenu(adService),
+          
+          // Level Complete
           if (_showLevelComplete) _buildLevelCompleteMenu(),
         ],
       ),
@@ -162,12 +188,12 @@ class _GameScreenState extends State<GameScreen> {
             children: [
               const Text('⏸️ Paused', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Color(0xFFFF69B4))),
               const SizedBox(height: 24),
-              _buildMenuButton('▶️ Resume', Colors.green, () { _game.resume(); setState(() => _showPauseMenu = false); }),
+              _buildMenuButton('▶️ Resume', Colors.green, () { _game?.resume(); setState(() => _showPauseMenu = false); }),
               const SizedBox(height: 12),
               if (adService.isRewardedLoaded) _buildMenuButton('🎬 Watch Ad for Boost!', Colors.amber, () {
                 adService.showRewardedAd(
-                  onRewarded: (type) { _game.applyBoost(type); setState(() { _activeBoost = type; _boostTime = 12; _showPauseMenu = false; }); _game.resume(); },
-                  onAdClosed: () { if (_showPauseMenu) { _game.resume(); setState(() => _showPauseMenu = false); } },
+                  onRewarded: (type) { _game?.applyBoost(type); setState(() { _activeBoost = type; _boostTime = 12; _showPauseMenu = false; }); _game?.resume(); },
+                  onAdClosed: () { if (_showPauseMenu) { _game?.resume(); setState(() => _showPauseMenu = false); } },
                 );
               }),
               const SizedBox(height: 12),
