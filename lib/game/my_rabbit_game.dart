@@ -241,4 +241,254 @@ class WorldTheme {
     if (level <= 5) return const WorldTheme(Color(0xFFFFB6C1), Color(0xFFFF69B4), 'Candy Land', '🍭');
     if (level <= 10) return const WorldTheme(Color(0xFF87CEEB), Color(0xFF4169E1), 'Sky World', '☁️');
     if (level <= 15) return const WorldTheme(Color(0xFF98FB98), Color(0xFF228B22), 'Forest', '🌲');
-    if (level
+    if (level <= 20) return const WorldTheme(Color(0xFFFFD700), Color(0xFFFFA500), 'Desert', '🏜️');
+    if (level <= 25) return const WorldTheme(Color(0xFFE6E6FA), Color(0xFF9370DB), 'Magic', '✨');
+    if (level <= 30) return const WorldTheme(Color(0xFFADD8E6), Color(0xFF00CED1), 'Ocean', '🌊');
+    if (level <= 35) return const WorldTheme(Color(0xFFFFDAB9), Color(0xFFFF6347), 'Sunset', '🌅');
+    if (level <= 40) return const WorldTheme(Color(0xFFD3D3D3), Color(0xFF708090), 'Space', '🚀');
+    if (level <= 45) return const WorldTheme(Color(0xFFFFC0CB), Color(0xFFFF1493), 'Love', '💖');
+    return const WorldTheme(Color(0xFFFFD700), Color(0xFFFFFF00), 'Rainbow', '🌈');
+  }
+}
+
+// ==================== MAIN GAME ====================
+class MyRabbitGame extends FlameGame with PanDetector, TapDetector {
+  final int level;
+  final Function onLevelComplete;
+  final Function onLevelFailed;
+  final Function(int, int) onScoreUpdate;
+  int bunnyLevel;
+  
+  late Bunny bunny;
+  List<FallingItem> items = [];
+  List<Obstacle> obstacles = [];
+  Random rnd = Random();
+  late WorldTheme theme;
+  
+  int score = 0;
+  int candiesCollected = 0;
+  int candyGoal = 15;
+  double timeRemaining = 60;
+  int lives = 3;
+  bool isPlaying = true;
+  bool isPaused = false;
+  
+  double spawnTimer = 0;
+  double obstacleTimer = 0;
+  
+  AdRewardType? activeBoost;
+  double boostTimeRemaining = 0;
+  
+  // Items for different levels
+  final candyEmojis = ['🍬', '🍭', '🍫', '🍩', '🧁', '🍪', '🍰', '🎂', '🍦', '🍨'];
+  final carrotEmojis = ['🥕', '🥕', '🥕', '🥬', '🥦', '🍎'];
+  final obstacleEmojis = ['🦔', '🌵', '💨', '🔥', '⚡', '🕳️', '👻', '🦇'];
+  
+  MyRabbitGame({
+    required this.level,
+    required this.onLevelComplete,
+    required this.onLevelFailed,
+    required this.onScoreUpdate,
+    this.bunnyLevel = 1,
+  }) {
+    candyGoal = 12 + level * 2;
+    timeRemaining = 65 - (level ~/ 5) * 3;
+    if (timeRemaining < 35) timeRemaining = 35;
+    theme = WorldTheme.forLevel(level);
+  }
+  
+  @override
+  Color backgroundColor() => theme.color1;
+  
+  @override
+  Future<void> onLoad() async {
+    // Bunny at center, higher up
+    final hatStyle = (level - 1) ~/ 5;
+    bunny = Bunny(Vector2(size.x / 2, size.y * 0.65), bunnyLevel, hatStyle);
+    bunny.baseY = size.y * 0.65;
+    add(bunny);
+  }
+  
+  @override
+  void render(Canvas canvas) {
+    // Gradient background
+    final rect = Rect.fromLTWH(0, 0, size.x, size.y);
+    final gradient = LinearGradient(
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+      colors: [theme.color1, theme.color2],
+    );
+    canvas.drawRect(rect, Paint()..shader = gradient.createShader(rect));
+    
+    // Decorative elements
+    _drawBackgroundDecorations(canvas);
+    
+    super.render(canvas);
+  }
+  
+  void _drawBackgroundDecorations(Canvas canvas) {
+    final decorPaint = Paint()..color = Colors.white.withOpacity(0.15);
+    
+    // Floating circles
+    for (int i = 0; i < 8; i++) {
+      final x = (i * 60.0 + 30) % size.x;
+      final y = (i * 80.0 + 50) % size.y;
+      canvas.drawCircle(Offset(x, y), 20 + (i % 3) * 10.0, decorPaint);
+    }
+  }
+  
+  @override
+  void update(double dt) {
+    super.update(dt);
+    if (!isPlaying || isPaused) return;
+    
+    final cappedDt = dt.clamp(0.0, 0.05);
+    
+    // Timer
+    timeRemaining -= cappedDt;
+    if (timeRemaining <= 0) {
+      timeRemaining = 0;
+      isPlaying = false;
+      if (candiesCollected >= candyGoal) {
+        onLevelComplete();
+      } else {
+        onLevelFailed();
+      }
+      return;
+    }
+    
+    // Spawn items
+    spawnTimer += cappedDt;
+    final spawnRate = 0.45 - level * 0.008;
+    if (spawnTimer >= spawnRate.clamp(0.2, 0.45) && items.length < 25) {
+      spawnTimer = 0;
+      _spawnItem();
+    }
+    
+    // Spawn obstacles (from level 6)
+    if (level >= 6) {
+      obstacleTimer += cappedDt;
+      if (obstacleTimer >= 2.5 - level * 0.03 && obstacles.length < 5) {
+        obstacleTimer = 0;
+        _spawnObstacle();
+      }
+    }
+    
+    // Update items & check collision
+    _updateItems();
+    _updateObstacles();
+    
+    // Boost timer
+    if (activeBoost != null) {
+      boostTimeRemaining -= cappedDt;
+      if (boostTimeRemaining <= 0) activeBoost = null;
+    }
+  }
+  
+  void _spawnItem() {
+    final useCarrot = level > 10 && rnd.nextDouble() < 0.3;
+    final emoji = useCarrot 
+      ? carrotEmojis[rnd.nextInt(carrotEmojis.length)]
+      : candyEmojis[rnd.nextInt(candyEmojis.length)];
+    final points = useCarrot ? 15 : 10;
+    final speed = 160 + level * 8.0;
+    
+    final item = FallingItem(
+      Vector2(rnd.nextDouble() * (size.x - 100) + 50, -60),
+      emoji, points, speed, isCarrot: useCarrot,
+    );
+    items.add(item);
+    add(item);
+  }
+  
+  void _spawnObstacle() {
+    final emoji = obstacleEmojis[rnd.nextInt(obstacleEmojis.length)];
+    var speed = 100 + level * 5.0;
+    if (activeBoost == AdRewardType.slowerObstacles) speed *= 0.5;
+    final hSpeed = level >= 15 ? (rnd.nextDouble() - 0.5) * 100 : 0.0;
+    
+    final obs = Obstacle(
+      Vector2(rnd.nextDouble() * (size.x - 100) + 50, -60),
+      emoji, speed, hSpeed, size.x,
+    );
+    obstacles.add(obs);
+    add(obs);
+  }
+  
+  void _updateItems() {
+    var pickupRadius = 55.0 + bunnyLevel * 3;
+    if (activeBoost == AdRewardType.biggerRadius) pickupRadius = 90;
+    
+    for (int i = items.length - 1; i >= 0; i--) {
+      final item = items[i];
+      
+      if (item.position.y > size.y + 60) {
+        remove(item);
+        items.removeAt(i);
+        continue;
+      }
+      
+      if ((item.position - bunny.position).length < pickupRadius) {
+        var pts = item.points;
+        if (activeBoost == AdRewardType.doublePoints) pts *= 2;
+        score += pts;
+        candiesCollected++;
+        onScoreUpdate(score, candiesCollected);
+        remove(item);
+        items.removeAt(i);
+        
+        if (candiesCollected >= candyGoal) {
+          isPlaying = false;
+          onLevelComplete();
+          return;
+        }
+      }
+    }
+  }
+  
+  void _updateObstacles() {
+    for (int i = obstacles.length - 1; i >= 0; i--) {
+      final obs = obstacles[i];
+      
+      if (obs.position.y > size.y + 60) {
+        remove(obs);
+        obstacles.removeAt(i);
+        continue;
+      }
+      
+      if (!bunny.isJumping && (obs.position - bunny.position).length < 40) {
+        lives--;
+        remove(obs);
+        obstacles.removeAt(i);
+        
+        if (lives <= 0) {
+          isPlaying = false;
+          onLevelFailed();
+          return;
+        }
+      }
+    }
+  }
+  
+  @override
+  void onPanUpdate(DragUpdateInfo info) {
+    if (isPlaying && !isPaused) {
+      bunny.moveX(info.delta.global.x, size.x);
+    }
+  }
+  
+  @override
+  void onTapDown(TapDownInfo info) {
+    if (isPlaying && !isPaused) {
+      bunny.jump();
+    }
+  }
+  
+  void pause() => isPaused = true;
+  void resume() => isPaused = false;
+  
+  void applyBoost(AdRewardType type) {
+    activeBoost = type;
+    boostTimeRemaining = 12;
+  }
+}
