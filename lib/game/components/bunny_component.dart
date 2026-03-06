@@ -1,6 +1,5 @@
 import 'package:flame/components.dart';
 import 'package:flutter/material.dart';
-import 'package:my_rabbit/models/game_config.dart';
 
 class BunnyComponent extends PositionComponent {
   int bunnyLevel;
@@ -10,38 +9,31 @@ class BunnyComponent extends PositionComponent {
   double _jumpProgress = 0;
   double _baseY = 0;
   double _hurtTimer = 0;
-  double _visualScale = 1.0;
-  
-  final Paint _bodyPaint = Paint()..color = const Color(0xFFFFB6C1);
-  final Paint _facePaint = Paint()..color = Colors.white;
-  final Paint _eyePaint = Paint()..color = Colors.black;
-  
+
   BunnyComponent({
     required Vector2 position,
     this.bunnyLevel = 1,
-  }) : super(position: position, size: Vector2(60, 60), anchor: Anchor.center) {
+  }) : super(
+    position: position,
+    size: Vector2(80, 80),
+    anchor: Anchor.center,
+  ) {
     _baseY = position.y;
-    _updateScale();
   }
-  
-  void _updateScale() {
-    _visualScale = 1.0 + (bunnyLevel - 1) * 0.08;
-    size = Vector2(60 * _visualScale, 60 * _visualScale);
-  }
-  
+
   @override
   void update(double dt) {
     super.update(dt);
     
     if (isJumping) {
-      _jumpProgress += dt / GameConfig.bunnyJumpDuration;
+      _jumpProgress += dt / 0.5;
       if (_jumpProgress >= 1.0) {
         _jumpProgress = 0;
         isJumping = false;
         position.y = _baseY;
       } else {
         final jumpCurve = 4 * _jumpProgress * (1 - _jumpProgress);
-        position.y = _baseY - (GameConfig.bunnyJumpHeight * jumpCurve * _visualScale);
+        position.y = _baseY - (100 * jumpCurve);
       }
     }
     
@@ -53,56 +45,117 @@ class BunnyComponent extends PositionComponent {
       }
     }
   }
-  
+
   @override
   void render(Canvas canvas) {
+    final paint = Paint();
+    
+    // Body color
     if (isHurt && (_hurtTimer * 10).floor() % 2 == 0) {
-      _bodyPaint.color = Colors.red.shade200;
+      paint.color = Colors.red.shade200;
     } else {
-      _bodyPaint.color = const Color(0xFFFFB6C1);
+      paint.color = const Color(0xFFFFB6C1); // Pink
     }
     
     final cx = size.x / 2;
     final cy = size.y / 2;
     
-    // Ears
-    canvas.drawOval(Rect.fromCenter(center: Offset(cx - 12, cy - 25), width: 12, height: 28), _bodyPaint);
-    canvas.drawOval(Rect.fromCenter(center: Offset(cx + 12, cy - 25), width: 12, height: 28), _bodyPaint);
+    // === EARS ===
+    // Left ear
+    canvas.drawOval(
+      Rect.fromCenter(center: Offset(cx - 18, cy - 35), width: 18, height: 40),
+      paint,
+    );
+    // Right ear  
+    canvas.drawOval(
+      Rect.fromCenter(center: Offset(cx + 18, cy - 35), width: 18, height: 40),
+      paint,
+    );
     
-    // Body
-    canvas.drawCircle(Offset(cx, cy), size.x * 0.38, _bodyPaint);
+    // Inner ears (lighter pink)
+    paint.color = const Color(0xFFFFDAB9);
+    canvas.drawOval(
+      Rect.fromCenter(center: Offset(cx - 18, cy - 35), width: 10, height: 28),
+      paint,
+    );
+    canvas.drawOval(
+      Rect.fromCenter(center: Offset(cx + 18, cy - 35), width: 10, height: 28),
+      paint,
+    );
     
-    // Face
-    canvas.drawOval(Rect.fromCenter(center: Offset(cx, cy + 3), width: size.x * 0.5, height: size.y * 0.4), _facePaint);
+    // === BODY ===
+    if (isHurt && (_hurtTimer * 10).floor() % 2 == 0) {
+      paint.color = Colors.red.shade200;
+    } else {
+      paint.color = const Color(0xFFFFB6C1);
+    }
+    canvas.drawCircle(Offset(cx, cy), 35, paint);
     
-    // Eyes
-    canvas.drawCircle(Offset(cx - 8, cy - 3), 4, _eyePaint);
-    canvas.drawCircle(Offset(cx + 8, cy - 3), 4, _eyePaint);
+    // === FACE (white) ===
+    paint.color = Colors.white;
+    canvas.drawOval(
+      Rect.fromCenter(center: Offset(cx, cy + 5), width: 45, height: 35),
+      paint,
+    );
     
-    // Nose
-    canvas.drawOval(Rect.fromCenter(center: Offset(cx, cy + 6), width: 6, height: 4), Paint()..color = Colors.pink.shade300);
-  }
-  
-  void moveHorizontal(double deltaX) {
-    position.x += deltaX * 1.5;
-    final game = findGame();
-    if (game != null) {
-      position.x = position.x.clamp(size.x / 2, game.size.x - size.x / 2);
+    // === EYES ===
+    paint.color = Colors.black;
+    canvas.drawCircle(Offset(cx - 12, cy - 5), 6, paint);
+    canvas.drawCircle(Offset(cx + 12, cy - 5), 6, paint);
+    
+    // Eye shine
+    paint.color = Colors.white;
+    canvas.drawCircle(Offset(cx - 14, cy - 7), 2, paint);
+    canvas.drawCircle(Offset(cx + 10, cy - 7), 2, paint);
+    
+    // === NOSE ===
+    paint.color = Colors.pink;
+    canvas.drawOval(
+      Rect.fromCenter(center: Offset(cx, cy + 8), width: 10, height: 7),
+      paint,
+    );
+    
+    // === CHEEKS ===
+    paint.color = Colors.pink.shade100.withOpacity(0.6);
+    canvas.drawCircle(Offset(cx - 25, cy + 5), 8, paint);
+    canvas.drawCircle(Offset(cx + 25, cy + 5), 8, paint);
+    
+    // === LEVEL BADGE ===
+    if (bunnyLevel > 1) {
+      paint.color = Colors.amber;
+      canvas.drawCircle(Offset(size.x - 12, 12), 12, paint);
+      
+      final textPainter = TextPainter(
+        text: TextSpan(
+          text: '$bunnyLevel',
+          style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+        ),
+        textDirection: TextDirection.ltr,
+      );
+      textPainter.layout();
+      textPainter.paint(canvas, Offset(size.x - 12 - textPainter.width / 2, 12 - textPainter.height / 2));
     }
   }
-  
+
+  void moveHorizontal(double deltaX) {
+    position.x += deltaX * 1.8;
+    final game = findGame();
+    if (game != null) {
+      position.x = position.x.clamp(50, game.size.x - 50);
+    }
+  }
+
   void jump() {
     if (!isJumping) {
       isJumping = true;
       _jumpProgress = 0;
     }
   }
-  
+
   void levelUp(int newLevel) {
     bunnyLevel = newLevel;
-    _updateScale();
   }
-  
+
   void hurt() {
     isHurt = true;
     _hurtTimer = 0;
